@@ -1528,9 +1528,15 @@ class BertForPairWiseClassification(BertPreTrainedModel):
 
     def forward(self, input_ids_1, input_ids_2,
                 token_type_ids_1=None, token_type_ids_2 = None,
-                attention_mask=None, labels=None, head_mask=None):
-        outputs_1 = self.bert(input_ids_1, token_type_ids_1, attention_mask, output_all_encoded_layers=False, head_mask=head_mask)
-        outputs_2 = self.bert(input_ids_2, token_type_ids_2, attention_mask, output_all_encoded_layers=False, head_mask=head_mask)
+                attention_mask_1=None,
+                attention_mask_2=None,
+                labels=None, head_mask_1=None, head_mask_2=None):
+        outputs_1 = self.bert(input_ids_1, token_type_ids_1, attention_mask_1,
+                              output_all_encoded_layers=False,
+                              head_mask=head_mask_1)
+        outputs_2 = self.bert(input_ids_2, token_type_ids_2, attention_mask_2,
+                              output_all_encoded_layers=False,
+                              head_mask=head_mask_2)
         if self.output_attentions:
             all_attentions_1, _, pooled_output_1 = outputs_1
             all_attentions_2, _, pooled_output_2 = outputs_2

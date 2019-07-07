@@ -33,7 +33,7 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss, MSELoss, NLLLoss
 
 from tensorboardX import SummaryWriter
 
@@ -249,16 +249,28 @@ def main():
                 with open(cached_train_features_file, "wb") as writer:
                     pickle.dump(train_features, writer)
 
-        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
+        all_input_ids_a = torch.tensor([f.input_ids_a for f in train_features], dtype=torch.long)
+        all_input_mask_a = torch.tensor([f.input_mask_a for f in train_features], dtype=torch.long)
+        all_segment_ids_a = torch.tensor([f.segment_ids_a for f in train_features], dtype=torch.long)
+
+        all_input_ids_b = torch.tensor([f.input_ids_b for f in train_features], dtype=torch.long)
+        all_input_mask_b = torch.tensor([f.input_mask_b for f in train_features], dtype=torch.long)
+        all_segment_ids_b = torch.tensor([f.segment_ids_b for f in train_features], dtype=torch.long)
+
 
         if output_mode == "classification":
             all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
         elif output_mode == "regression":
             all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.float)
 
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        train_data = TensorDataset(all_input_ids_a,
+                                   all_input_ids_b,
+                                   all_input_mask_a,
+                                   all_input_mask_b,
+                                   all_segment_ids_a,
+                                   all_segment_ids_b,
+                                   all_label_ids)
+
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
         else:
@@ -310,14 +322,26 @@ def main():
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, label_ids = batch
+                (input_ids_a, input_ids_b,
+                 input_mask_a, input_mask_b,
+                 segment_ids_a, segment_ids_b,
+                 label_ids) = batch
 
                 # define a new function to compute loss values for both output_modes
-                logits = model(input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+                cos_sim, pos_prob, _, _ = model(input_ids_1 = input_ids_a,
+                                                input_ids_2 = input_ids_b,
+                                                token_type_ids_1=segment_ids_a,
+                                                token_type_ids_2=segment_ids_b,
+                                                attention_mask_1=input_mask_a,
+                                                attention_mask_2=input_mask_b,
+                                               )
+                neg_prob = 1 - pos_prob
+                probs = torch.stack([pos_prob, neg_prob], dim = 1)
+                log_probs = torch.log(probs)
 
                 if output_mode == "classification":
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
+                    loss_fct = NLLLoss()
+                    loss = loss_fct(log_probs.view(-1, num_labels), label_ids.view(-1))
                 elif output_mode == "regression":
                     loss_fct = MSELoss()
                     loss = loss_fct(logits.view(-1), label_ids.view(-1))
@@ -397,16 +421,28 @@ def main():
         logger.info("***** Running evaluation *****")
         logger.info("  Num examples = %d", len(eval_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+
+        all_input_ids_a = torch.tensor([f.input_ids_a for f in eval_features], dtype=torch.long)
+        all_input_mask_a = torch.tensor([f.input_mask_a for f in eval_features], dtype=torch.long)
+        all_segment_ids_a = torch.tensor([f.segment_ids_a for f in eval_features], dtype=torch.long)
+
+        all_input_ids_b = torch.tensor([f.input_ids_b for f in eval_features], dtype=torch.long)
+        all_input_mask_b = torch.tensor([f.input_mask_b for f in eval_features], dtype=torch.long)
+        all_segment_ids_b = torch.tensor([f.segment_ids_b for f in eval_features], dtype=torch.long)
+
 
         if output_mode == "classification":
             all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         elif output_mode == "regression":
             all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.float)
 
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        eval_data = TensorDataset(all_input_ids_a,
+                                  all_input_ids_b,
+                                  all_input_mask_a,
+                                  all_input_mask_b,
+                                  all_segment_ids_a,
+                                  all_segment_ids_b,
+                                  all_label_ids)
         # Run prediction for full data
         if args.local_rank == -1:
             eval_sampler = SequentialSampler(eval_data)
@@ -420,19 +456,36 @@ def main():
         preds = []
         out_label_ids = None
 
-        for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader, desc="Evaluating"):
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
+        for (input_ids_a, input_ids_b,
+             input_mask_a, input_mask_b,
+             segment_ids_a, segment_ids_b
+            ) in tqdm(eval_dataloader, desc="Evaluating"):
+            input_ids_a = input_ids_a.to(device)
+            input_mask_a = input_mask_a.to(device)
+            segment_ids_a = segment_ids_a.to(device)
+
+            input_ids_b = input_ids_b.to(device)
+            input_mask_b = input_mask_b.to(device)
+            segment_ids_b = segment_ids_b.to(device)
+
             label_ids = label_ids.to(device)
 
             with torch.no_grad():
-                logits = model(input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
+                cos_sim, pos_prob, _, _ = model(input_ids_1 = input_ids_a,
+                                                input_ids_2 = input_ids_b,
+                                                token_type_ids_1=segment_ids_a,
+                                                token_type_ids_2=segment_ids_b,
+                                                attention_mask_1=input_mask_a,
+                                                attention_mask_2=input_mask_b,
+                                               )
+                neg_prob = 1 - pos_prob
+                probs = torch.stack([pos_prob, neg_prob], dim = 1)
+                log_probs = torch.log(probs)
 
             # create eval loss and other metric required by the task
             if output_mode == "classification":
-                loss_fct = CrossEntropyLoss()
-                tmp_eval_loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
+                loss_fct = NLLLoss()
+                tmp_eval_loss = loss_fct(log_probs.view(-1, num_labels), label_ids.view(-1))
             elif output_mode == "regression":
                 loss_fct = MSELoss()
                 tmp_eval_loss = loss_fct(logits.view(-1), label_ids.view(-1))
