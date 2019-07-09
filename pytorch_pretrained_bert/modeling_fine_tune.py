@@ -1549,6 +1549,7 @@ class BertForPairWiseClassification(BertPreTrainedModel):
 
         # logits = self.classifier(pooled_output)
         cos_sim = self.cos(pooled_output_1, pooled_output_2) # Shape: Batch_size
+        cos_sim = torch.clamp(cos_sim, min= -1.0, max=1.0)
         pos_prob = normed_cos_sim = (cos_sim + 1.0) / 2.0
         neg_prob = 1 - pos_prob
         probs = torch.stack([pos_prob, neg_prob], dim = 1) # Shape: Batch_size X 2
