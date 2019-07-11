@@ -705,6 +705,8 @@ def compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "wnli":
         return {"acc": simple_accuracy(preds, labels)}
+    elif task_name == 'atec_ccks':
+        return acc_and_f1(preds, labels)
     else:
         raise KeyError(task_name)
 

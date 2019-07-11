@@ -44,7 +44,8 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
 # from run_classifier_dataset_utils import processors, output_modes, convert_examples_to_features, compute_metrics
-from run_classifier_dataset_utils_fine_tune import processors, output_modes, convert_examples_to_features, compute_metrics
+from run_classifier_dataset_utils_fine_tune import processors, output_modes, compute_metrics
+from run_classifier_dataset_utils_fine_tune import convert_examples_to_features_fine_tune as convert_examples_to_features
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -336,7 +337,7 @@ def main():
                                                 attention_mask_2=input_mask_b,
                                                )
                 neg_prob = 1 - pos_prob
-                probs = torch.stack([pos_prob, neg_prob], dim = 1)
+                probs = torch.stack([neg_prob, pos_prob], dim = 1)
                 log_probs = torch.log(probs)
 
                 if output_mode == "classification":
@@ -357,7 +358,7 @@ def main():
                     loss.backward()
 
                 tr_loss += loss.item()
-                nb_tr_examples += input_ids.size(0)
+                nb_tr_examples += input_ids_a.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     if args.fp16:
@@ -458,7 +459,8 @@ def main():
 
         for (input_ids_a, input_ids_b,
              input_mask_a, input_mask_b,
-             segment_ids_a, segment_ids_b
+             segment_ids_a, segment_ids_b,
+             label_ids
             ) in tqdm(eval_dataloader, desc="Evaluating"):
             input_ids_a = input_ids_a.to(device)
             input_mask_a = input_mask_a.to(device)
@@ -479,7 +481,7 @@ def main():
                                                 attention_mask_2=input_mask_b,
                                                )
                 neg_prob = 1 - pos_prob
-                probs = torch.stack([pos_prob, neg_prob], dim = 1)
+                probs = torch.stack([neg_prob, pos_prob], dim = 1)
                 log_probs = torch.log(probs)
 
             # create eval loss and other metric required by the task
@@ -493,11 +495,11 @@ def main():
             eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
             if len(preds) == 0:
-                preds.append(logits.detach().cpu().numpy())
+                preds.append(probs.detach().cpu().numpy())
                 out_label_ids = label_ids.detach().cpu().numpy()
             else:
                 preds[0] = np.append(
-                    preds[0], logits.detach().cpu().numpy(), axis=0)
+                    preds[0], probs.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(
                     out_label_ids, label_ids.detach().cpu().numpy(), axis=0)
 

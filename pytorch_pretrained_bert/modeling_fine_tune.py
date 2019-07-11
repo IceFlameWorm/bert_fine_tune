@@ -1549,10 +1549,120 @@ class BertForPairWiseClassification(BertPreTrainedModel):
 
         # logits = self.classifier(pooled_output)
         cos_sim = self.cos(pooled_output_1, pooled_output_2) # Shape: Batch_size
-        cos_sim = torch.clamp(cos_sim, min= -1.0, max=1.0)
+        eps = 1e-4
+        cos_sim = torch.clamp(cos_sim, min= -1.0 + eps, max=1.0 - eps)
         pos_prob = normed_cos_sim = (cos_sim + 1.0) / 2.0
         neg_prob = 1 - pos_prob
         probs = torch.stack([pos_prob, neg_prob], dim = 1) # Shape: Batch_size X 2
+        log_probs = torch.log(probs)
+
+        if labels is not None:
+            # loss_fct = CrossEntropyLoss()
+            # loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            
+            loss_fct = nn.NLLLoss()
+            loss = loss_fct(log_probs.view(-1, self.num_labels), labels.view(-1))
+            return loss
+        elif self.output_attentions:
+            return all_attentions_1, all_attentions_2, cos_sim, pos_prob, pooled_output_1, pooled_output_2
+        return cos_sim, pos_prob, pooled_output_1, pooled_output_2
+
+
+class BertForPointWiseClassification(BertPreTrainedModel):
+    """BERT model for classification.
+    This module is composed of the BERT model with a linear layer on top of
+    the pooled output.
+
+    Params:
+        `config`: a BertConfig class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
+        `num_labels`: the number of classes for the classifier. Default = 2.
+
+    Inputs:
+        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            with the word token indices in the vocabulary. Items in the batch should begin with the special "CLS" token. (see the tokens preprocessing logic in the scripts
+            `extract_features.py`, `run_classifier.py` and `run_squad.py`)
+        `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
+            a `sentence B` token (see BERT paper for more details).
+        `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
+            input sequence length in the current batch. It's the mask that we typically use for attention when
+            a batch has varying length sentences.
+        `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
+            with indices selected in [0, ..., num_labels].
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+
+    Outputs:
+        if `labels` is not `None`:
+            Outputs the CrossEntropy classification loss of the output with the labels.
+        if `labels` is `None`:
+            Outputs the classification logits of shape [batch_size, num_labels].
+
+    Example usage:
+    ```python
+    # Already been converted into WordPiece token ids
+    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
+        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
+
+    num_labels = 2
+
+    model = BertForSequenceClassification(config, num_labels)
+    logits = model(input_ids, token_type_ids, input_mask)
+    ```
+    """
+    def __init__(self, config, num_labels=2, output_attentions=False, keep_multihead_output=False):
+        super(BertForPairWiseClassification, self).__init__(config)
+        self.output_attentions = output_attentions
+        self.num_labels = num_labels
+        self.bert = BertModel(config, output_attentions=output_attentions,
+                                      keep_multihead_output=keep_multihead_output)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        # self.classifier = nn.Linear(config.hidden_size, num_labels)
+        self.cos = nn.CosineSimilarity()
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids_1, input_ids_2,
+                token_type_ids_1=None, token_type_ids_2 = None,
+                attention_mask_1=None,
+                attention_mask_2=None,
+                labels=None, head_mask_1=None, head_mask_2=None):
+        outputs_1 = self.bert(input_ids_1, token_type_ids_1, attention_mask_1,
+                              output_all_encoded_layers=False,
+                              head_mask=head_mask_1)
+        outputs_2 = self.bert(input_ids_2, token_type_ids_2, attention_mask_2,
+                              output_all_encoded_layers=False,
+                              head_mask=head_mask_2)
+        if self.output_attentions:
+            all_attentions_1, _, pooled_output_1 = outputs_1
+            all_attentions_2, _, pooled_output_2 = outputs_2
+        else:
+            _, pooled_output_1 = outputs_1
+            _, pooled_output_2 = outputs_2
+
+        pooled_output_1 = self.dropout(pooled_output_1) # Shape: Batch_size X Dim
+        pooled_output_2 = self.dropout(pooled_output_2)
+
+        # merge
+        merge1 = pooled_output_1 + pooled_output_2
+        merge2 = torch.abs(pooled_output_1 - pooled_output_2)
+        merge3 = pooled_output_1 * pooled_output_2
+        merge = torch.cat([merge1, merge2, merge3], dim = 1)
+
+        # logits = self.classifier(pooled_output)
+        cos_sim = self.cos(pooled_output_1, pooled_output_2) # Shape: Batch_size
+        eps = 1e-4
+        cos_sim = torch.clamp(cos_sim, min= -1.0 + eps, max=1.0 - eps)
+        pos_prob = normed_cos_sim = (cos_sim + 1.0) / 2.0
+        neg_prob = 1 - pos_prob
+        probs = torch.stack([neg_prob, pos_prob], dim = 1) # Shape: Batch_size X 2
         log_probs = torch.log(probs)
 
         if labels is not None:
