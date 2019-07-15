@@ -446,6 +446,40 @@ class AtecCcksProcessor(DataProcessor):
         return examples
 
 
+class LCQMCProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+        fp = os.path.join(data_dir, 'train.csv')
+        return self._create_examples(fp, 'train')
+
+    def get_dev_examples(self, data_dir):
+        fp = os.path.join(data_dir, 'dev.csv')
+        return self._create_examples(fp, 'dev')
+
+    def get_test_examples(self, data_dir):
+        fp = os.path.join(data, 'test.csv')
+        return self._create_examples(fp, 'test')
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, fp, set_type, sep = '\t'):
+        df = pd.read_csv(fp, sep = sep, na_filter = False)
+        examples = []
+        for row in df.itertuples():
+            index = row.Index
+            guid = "%s-%s" % (set_type, index)
+            text_1 = row.text_1
+            text_2 = row.text_2
+            label = str(row.label)
+            examples.append(InputExample(guid = guid,
+                                         text_a = text_1,
+                                         text_b = text_2,
+                                         label = label
+                                        ))
+        return examples
+
+
 
 def convert_examples_to_features(examples, label_list, max_seq_length,
                                  tokenizer, output_mode):
@@ -722,6 +756,7 @@ processors = {
     "rte": RteProcessor,
     "wnli": WnliProcessor,
     "atec_ccks": AtecCcksProcessor,
+    "lcqmc": LCQMCProcessor,
 }
 
 output_modes = {
@@ -735,4 +770,5 @@ output_modes = {
     "rte": "classification",
     "wnli": "classification",
     "atec_ccks": "classification",
+    "lcqmc": "classification",
 }

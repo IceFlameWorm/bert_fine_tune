@@ -1619,7 +1619,7 @@ class BertForPointWiseClassification(BertPreTrainedModel):
     ```
     """
     def __init__(self, config, num_labels=2, output_attentions=False, keep_multihead_output=False):
-        super(BertForPairWiseClassification, self).__init__(config)
+        super(BertForPointWiseClassification, self).__init__(config)
         self.output_attentions = output_attentions
         self.num_labels = num_labels
         self.bert = BertModel(config, output_attentions=output_attentions,
