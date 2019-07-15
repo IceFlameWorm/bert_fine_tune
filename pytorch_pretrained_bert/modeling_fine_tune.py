@@ -1625,8 +1625,7 @@ class BertForPointWiseClassification(BertPreTrainedModel):
         self.bert = BertModel(config, output_attentions=output_attentions,
                                       keep_multihead_output=keep_multihead_output)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # self.classifier = nn.Linear(config.hidden_size, num_labels)
-        self.cos = nn.CosineSimilarity()
+        self.classifier = nn.Linear(config.hidden_size * 3, num_labels)
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids_1, input_ids_2,
@@ -1656,22 +1655,12 @@ class BertForPointWiseClassification(BertPreTrainedModel):
         merge3 = pooled_output_1 * pooled_output_2
         merge = torch.cat([merge1, merge2, merge3], dim = 1)
 
-        # logits = self.classifier(pooled_output)
-        cos_sim = self.cos(pooled_output_1, pooled_output_2) # Shape: Batch_size
-        eps = 1e-4
-        cos_sim = torch.clamp(cos_sim, min= -1.0 + eps, max=1.0 - eps)
-        pos_prob = normed_cos_sim = (cos_sim + 1.0) / 2.0
-        neg_prob = 1 - pos_prob
-        probs = torch.stack([neg_prob, pos_prob], dim = 1) # Shape: Batch_size X 2
-        log_probs = torch.log(probs)
+        logits = self.classifier(merge)
 
         if labels is not None:
-            # loss_fct = CrossEntropyLoss()
-            # loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            
-            loss_fct = nn.NLLLoss()
-            loss = loss_fct(log_probs.view(-1, self.num_labels), labels.view(-1))
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             return loss
         elif self.output_attentions:
-            return all_attentions_1, all_attentions_2, cos_sim, pos_prob, pooled_output_1, pooled_output_2
-        return cos_sim, pos_prob, pooled_output_1, pooled_output_2
+            return all_attentions_1, all_attentions_2, logits, pooled_output_1, pooled_output_2
+        return logits, pooled_output_1, pooled_output_2
