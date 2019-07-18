@@ -422,7 +422,7 @@ class AtecCcksProcessor(DataProcessor):
         return self._create_examples(fp, 'dev')
 
     def get_test_examples(self, data_dir):
-        fp = os.path.join(data, 'test.csv')
+        fp = os.path.join(data_dir, 'test.csv')
         return self._create_examples(fp, 'test')
 
     def get_labels(self):
