@@ -505,7 +505,8 @@ def main():
             preds = np.squeeze(preds)
         result = compute_metrics(task_name, preds, out_label_ids)
 
-        loss = tr_loss/global_step if args.do_train else None
+        #loss = tr_loss/global_step if args.do_train else None
+        loss = tr_loss/nb_tr_steps if args.do_train else None
 
         result['eval_loss'] = eval_loss
         result['global_step'] = global_step

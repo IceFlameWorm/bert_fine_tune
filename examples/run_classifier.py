@@ -301,6 +301,7 @@ def main():
 
         model.train()
         for _ in trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]):
+            tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
                 batch = tuple(t.to(device) for t in batch)
@@ -450,7 +451,8 @@ def main():
             preds = np.squeeze(preds)
         result = compute_metrics(task_name, preds, out_label_ids)
 
-        loss = tr_loss/global_step if args.do_train else None
+        #loss = tr_loss/global_step if args.do_train else None
+        loss = tr_loss/nb_tr_steps if args.do_train else None # select the average train loss of the last epoch
 
         result['eval_loss'] = eval_loss
         result['global_step'] = global_step
