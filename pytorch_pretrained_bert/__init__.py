@@ -4,10 +4,13 @@ from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .tokenization_gpt2 import GPT2Tokenizer
 
-from .modeling import (BertConfig, BertModel, BertForPreTraining,
+from .modeling_fine_tune import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
                        BertForSequenceClassification, BertForMultipleChoice,
                        BertForTokenClassification, BertForQuestionAnswering,
+                       BertForPairWiseClassification,
+                       BertForPairWiseClassification2,
+                       BertForPointWiseClassification,
                        load_tf_weights_in_bert)
 from .modeling_openai import (OpenAIGPTConfig, OpenAIGPTModel,
                               OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
