@@ -1,9 +1,9 @@
-DATA_SET=ATEC_CCKS
+DATA_SET=LCQMC
 TASK_NAME=$(echo ${DATA_SET} | tr '[A-Z]' '[a-z]')
-MODEL_TYPE=pointwise
-LEARNING_RATE=2e-5
-EPOCHS=2.0
-EPOCH_SPAN=1_2
+MODEL_TYPE=pairwise2
+LEARNING_RATE=5e-6
+EPOCHS=3.0
+EPOCH_SPAN=1_3
 MAX_SEQ_LENGTH=40
 
 DATA_DIR=/efs/projects/bert_fine_tune/fine_tune/data/train_dev_test/${DATA_SET}/processed

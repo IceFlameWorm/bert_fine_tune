@@ -1,14 +1,14 @@
 DATA_SET=LCQMC
 TASK_NAME=$(echo ${DATA_SET} | tr '[A-Z]' '[a-z]')
-MODEL_TYPE=pointwise
-LEARNING_RATE=8e-6
-EPOCHS=2.0
-EPOCH_SPAN=1_2
+MODEL_TYPE=pairwise2
+LEARNING_RATE=2e-5
+EPOCHS=3.0
+EPOCH_SPAN=1_3
 MAX_SEQ_LENGTH=40
 
 DATA_DIR=/efs/projects/bert_fine_tune/fine_tune/data/train_dev_test/${DATA_SET}/processed
 BERT_MODEL_PATH=/efs/downloads/bert/pytorch/bert_base_chinese
-#BERT_MODEL_PATH=/efs/fine_tune/lcqmc/pointwise/lcqmc_fine_tune_40_1_5e-6/
+#BERT_MODEL_PATH=/efs/fine_tune/${TASK_NAME}/${MODEL_TYPE}/${TASK_NAME}_fine_tune_${MAX_SEQ_LENGTH}_1_${LEARNING_RATE}/
 #BERT_MODEL_PATH=/efs/fine_tune/lcqmc/pointwise/lcqmc_fine_tune_sample/
 
 
